@@ -25,18 +25,15 @@ from kats.consts import TimeSeriesChangePoint, TimeSeriesData
 from kats.detectors.detector import Detector
 from statsmodels.tsa.api import SimpleExpSmoothing
 
-"""Mann-Kendall (MK) Trend Detector Module
+"""Seasonal Mann-Kendall (SMK) Trend Detector Module
 
-This module includes detectors based on the Mann-Kendall Test, which is a
-non-parametric test for monotonic trends.  Right now, this module includes
-detectors based on the original MK Test and the Multivariate MK Test.  Neither
-detector has any distribution requirement for the data, but there should not be
-any serial correlation.
+This module includes detectors based on the Seasonal Mann-Kendall Test, which is a
+non-parametric test for monotonic trends.
 """
 
 
-class MKChangePoint(TimeSeriesChangePoint):
-    """Changepoint for MKDetector
+class SMKChangePoint(TimeSeriesChangePoint):
+    """Changepoint for SMKDetector
 
     Attributes:
 
@@ -44,7 +41,7 @@ class MKChangePoint(TimeSeriesChangePoint):
         end_time: End time of the change.
         confidence: The confidence of the change point.
         detector_type: Detector, Type of detector changepoint is for.  Right
-            now, this is always MKDetector.
+            now, this is always SMKDetector.
         is_multivariate: boolean, Whether this is a changepoint for a
             multivariate time series.
         trend_direction: string, Direction of trend, either 'increasing' or
@@ -66,7 +63,7 @@ class MKChangePoint(TimeSeriesChangePoint):
         super().__init__(start_time, end_time, confidence)
         if _no_mk:
             raise RuntimeError("requires pymannkendall to be installed")
-        self._detector_type = MKDetector
+        self._detector_type = SMKDetector
         self._is_multivariate = is_multivariate
         self._trend_direction = trend_direction
         self._Tau = Tau
@@ -89,7 +86,7 @@ class MKChangePoint(TimeSeriesChangePoint):
 
     def __repr__(self) -> str:
         return (
-            f"MKChangePoint(start_time: {self._start_time}, end_time: "
+            f"SMKChangePoint(start_time: {self._start_time}, end_time: "
             f"{self._end_time}, confidence: {self._confidence}, "
             f"detector_type: {self._detector_type}, is_multivariate: "
             f"{self._is_multivariate}, trend_direction: {self._trend_direction} "
@@ -97,12 +94,10 @@ class MKChangePoint(TimeSeriesChangePoint):
         )
 
 
-class MKDetector(Detector):
+class SMKDetector(Detector):
     """
-    MKDetector (MK stands for Mann-Kendall) is a non-parametric statistical test
+    SMKDetector (SMK stands for Seasonal Mann-Kendall) is a non-parametric statistical test
     used to determine whether there is a monotonic trend in a given time series.
-    See https://vsp.pnnl.gov/help/vsample/Design_Trend_Mann_Kendall.htm for
-    details.
 
     The basic idea is to check whether there is a monotonic trend based on a
     look back number of time steps (`window_size`).
@@ -117,22 +112,6 @@ class MKDetector(Detector):
             the p-value to determine changepoints, set threshold = 0.
         alpha: `float`, significance level (0.05 by default)
         multivariate: `bool`, whether the input time series is multivariate
-
-    Example:
-    --------
-    >>> import pandas as pd
-    >>> from kats.consts import TimeSeriesData
-    >>> from kats.detectors.trend_mk import MKDetector
-    >>> # read data and rename the two columns required by TimeSeriesData
-    >>> # structure
-    >>> data = pd.read_csv("../filename.csv") # demo file does not exist
-    >>> TSdata = TimeSeriesData(data)
-    >>> # create MKDetector with given data and params
-    >>> d = MKDetector(data=TSdata)
-    >>> # call detector method to fit model
-    >>> detected_time_points = d.detector(window_size=20, direction="up")
-    >>> # plot the results
-    >>> d.plot(detected_time_points)
     """
 
     window_size: Optional[int] = None
@@ -140,7 +119,7 @@ class MKDetector(Detector):
     direction: Optional[str] = None
     freq: Optional[str] = None
     ts: Optional[pd.DataFrame] = None
-    MK_statistics: Optional[pd.DataFrame] = None
+    SMK_statistics: Optional[pd.DataFrame] = None
 
     def __init__(
         self,
@@ -151,7 +130,7 @@ class MKDetector(Detector):
     ) -> None:
         # pyre-fixme[6]: Expected `TimeSeriesData` for 1st param but got
         #  `Optional[TimeSeriesData]`.
-        super(MKDetector, self).__init__(data=data)
+        super(SMKDetector, self).__init__(data=data)
         if _no_mk:
             raise RuntimeError("requires pymannkendall to be installed")
 
@@ -163,11 +142,11 @@ class MKDetector(Detector):
         # Assume univariate but multivariate data is detected
         if self.data is not None:
             if not self.data.is_univariate() and not self.multivariate:
-                logging.warning("Using multivariate MK test for univariate data.")
+                logging.warning("Using multivariate SMK test for univariate data.")
                 self.multivariate = True
             # Assume multivariate but univariate data is detected
             elif self.data.is_univariate() and self.multivariate:
-                logging.warning("Using univariate MK test on multivariate data.")
+                logging.warning("Using univariate SMK test on multivariate data.")
 
     def _remove_seasonality(
         self, ts: pd.DataFrame, freq: Optional[str] = None
@@ -249,14 +228,11 @@ class MKDetector(Detector):
             return "no trend"
         return trend
 
-    def MKtest(self, ts: pd.DataFrame, period: int) -> Tuple[datetime, str, float, float]:
-        """Performs the Mann-Kendall (MK) test for trend detection.
-
-        (Mann 1945, Kendall 1975, Gilbert 1987)
+    def SMKtest(self, ts: pd.DataFrame, period: int) -> Tuple[datetime, str, float, float]:
+        """Performs the Seasonal Mann-Kendall (SMK) test for trend detection.
 
         Args:
             ts: the dataframe of input data with time as index.
-                This time series should not present seasonality for MK test.
 
         Returns:
             (tuple): tuple containing:
@@ -279,16 +255,13 @@ class MKDetector(Detector):
 
         return anchor_date, trend, p, Tau
 
-    def multivariate_MKtest(
+    def multivariate_SMKtest(
         self, ts: pd.DataFrame
     ) -> Tuple[datetime, str, float, Dict]:
-        """Performs the Multivariate Mann-Kendall (MK) test.
-
-        Proposed by R. M. Hirsch and J. R. Slack (1984).
+        """Performs the Multivariate Seasonal Mann-Kendall (SMK) test.
 
         Args:
-            ts: the dataframe of input data with time as index.  This time
-                series should not present seasonality for MK test.
+            ts: the dataframe of input data with time as index.
 
         Returns:
             (tuple): tuple containing:
@@ -321,7 +294,7 @@ class MKDetector(Detector):
             x_i, n = self._drop_missing_values(x[:, i])
             # individual Tau score and trend
             try:
-                mk_result = mk.original_test(x_i)
+                mk_result = mk.seasonal_test(x_i)
                 trend_i, Tau_i = mk_result.trend, mk_result.Tau
                 trend_i = self._apply_threshold(trend_i, Tau_i)
                 Tau_dict[ts.columns[i]] = Tau_i
@@ -333,22 +306,22 @@ class MKDetector(Detector):
         return anchor_date, trend_dict, p, Tau_dict
 
     def runDetector(self, ts: pd.DataFrame, period: int) -> Dict[str, Any]:
-        """Runs MK test for a time point in the input data.
+        """Runs SMK test for a time point in the input data.
 
         Args:
             ts: the dataframe of input data with noise and seasonality removed.
                 Its index is time.
 
         Returns:
-            A dictionary consisting of MK test statistics for the anchor time
+            A dictionary consisting of SMK test statistics for the anchor time
                 point, including trend, p-value and Kendall Tau.
         """
 
-        # run MK test
+        # run SMK test
         if self.multivariate:
-            anchor_date, trend, p, Tau = self.multivariate_MKtest(ts)
+            anchor_date, trend, p, Tau = self.multivariate_SMKtest(ts)
         else:
-            anchor_date, trend, p, Tau = self.MKtest(ts, period)
+            anchor_date, trend, p, Tau = self.SMKtest(ts, period)
 
         return {"ds": anchor_date, "trend_direction": trend, "p": p, "Tau": Tau}
 
@@ -360,8 +333,8 @@ class MKDetector(Detector):
         direction: str = "both",
         freq: Optional[str] = None,
         period: Optional[int] = None
-    ) -> Sequence[MKChangePoint]:
-        """Runs MK test sequentially.
+    ) -> Sequence[SMKChangePoint]:
+        """Runs SMK test sequentially.
 
         It finds the trend and calculates the related statistics for all time
         points in a given time series.
@@ -419,8 +392,8 @@ class MKDetector(Detector):
                     f"at least training_days={training_days} points."
                 )
 
-        # save the trend detection results to dataframe MK_statistics
-        MK_statistics = pd.DataFrame(columns=["ds", "trend_direction", "p", "Tau"])
+        # save the trend detection results to dataframe SMK_statistics
+        SMK_statistics = pd.DataFrame(columns=["ds", "trend_direction", "p", "Tau"])
 
         if training_days is not None:  # anchor date analysis for real-time setting
             # only look back training_days for noise and seasonality removal
@@ -429,8 +402,8 @@ class MKDetector(Detector):
             # deseasonalization
             ts_deseas = self._remove_seasonality(ts, freq=self.freq)
             ts_smoothed = self._smoothing(ts_deseas)  # smoothing
-            # append MK statistics to MK_statistics dataframe
-            MK_statistics = MK_statistics.append(
+            # append MK statistics to SMK_statistics dataframe
+            SMK_statistics = SMK_statistics.append(
                 # pyre-ignore[6]: Expected `Union[Dict[Union[int, str], typing.Any], L...
                 self.runDetector(ts=ts_smoothed,period=period),
                 ignore_index=True,
@@ -446,64 +419,64 @@ class MKDetector(Detector):
             for t in ts_smoothed.index[window_size:]:
                 # look back window_size day for trend detection
                 ts_tmp = ts_smoothed.loc[:t, :]
-                # append MK statistics to MK_statistics dataframe
-                MK_statistics = MK_statistics.append(
+                # append MK statistics to SMK_statistics dataframe
+                SMK_statistics = SMK_statistics.append(
                     # pyre-ignore[6]: Expected `Union[Dict[Union[int, str], typing.Any...
                     self.runDetector(ts=ts_tmp, period=period),
                     ignore_index=True,
                 )
 
-        self.MK_statistics = MK_statistics
+        self.SMK_statistics = SMK_statistics
 
         # take the subset for detection with specified trend_direction
-        MK_results = self.get_MK_results(
-            MK_statistics=MK_statistics, direction=direction
+        SMK_results = self.get_SMK_results(
+            SMK_statistics=SMK_statistics, direction=direction
         )
 
-        return self._convert_detected_tps(MK_results)
+        return self._convert_detected_tps(SMK_results)
 
-    def get_MK_results(
-        self, MK_statistics: pd.DataFrame, direction: str
+    def get_SMK_results(
+        self, SMK_statistics: pd.DataFrame, direction: str
     ) -> pd.DataFrame:
-        """Obtain a subset of MK_statistics given the desired direction"""
+        """Obtain a subset of SMK_statistics given the desired direction"""
 
         if direction not in ["up", "down", "both"]:
             raise ValueError("direction should be chosen from {'up', 'down', 'both'}")
 
         if self.multivariate:
-            trend_df = pd.DataFrame.from_dict(list(MK_statistics.trend_direction))
+            trend_df = pd.DataFrame.from_dict(list(SMK_statistics.trend_direction))
             overall_trend = trend_df["overall"]
 
             if direction == "down":
-                MK_results = MK_statistics.loc[overall_trend == "decreasing", :]
+                SMK_results = SMK_statistics.loc[overall_trend == "decreasing", :]
             elif direction == "up":
-                MK_results = MK_statistics.loc[overall_trend == "increasing", :]
+                SMK_results = SMK_statistics.loc[overall_trend == "increasing", :]
             elif direction == "both":
-                MK_results = MK_statistics.loc[overall_trend != "no trend", :]
+                SMK_results = SMK_statistics.loc[overall_trend != "no trend", :]
         else:
             if direction == "down":
-                MK_results = MK_statistics.loc[
-                    MK_statistics["trend_direction"] == "decreasing", :
+                SMK_results = SMK_statistics.loc[
+                    SMK_statistics["trend_direction"] == "decreasing", :
                 ]
             elif direction == "up":
-                MK_results = MK_statistics.loc[
-                    MK_statistics["trend_direction"] == "increasing", :
+                SMK_results = SMK_statistics.loc[
+                    SMK_statistics["trend_direction"] == "increasing", :
                 ]
             elif direction == "both":
-                MK_results = MK_statistics.loc[
-                    MK_statistics["trend_direction"] != "no trend", :
+                SMK_results = SMK_statistics.loc[
+                    SMK_statistics["trend_direction"] != "no trend", :
                 ]
-        # pyre-fixme[61]: `MK_results` may not be initialized here.
-        return MK_results
+        # pyre-fixme[61]: `SMK_results` may not be initialized here.
+        return SMK_results
 
-    def _convert_detected_tps(self, MK_results: pd.DataFrame) -> List[MKChangePoint]:
+    def _convert_detected_tps(self, SMK_results: pd.DataFrame) -> List[SMKChangePoint]:
         """Convert the dataframe of detected_tps and Tau into desired format."""
 
         converted = []
 
-        for _index, row in MK_results.iterrows():
+        for _index, row in SMK_results.iterrows():
             t = row["ds"]
-            detected_time_point = MKChangePoint(
+            detected_time_point = SMKChangePoint(
                 start_time=t,
                 end_time=t,
                 confidence=1 - row["p"],
@@ -515,12 +488,12 @@ class MKDetector(Detector):
 
         return converted
 
-    def get_MK_statistics(self) -> pd.DataFrame:
-        """Get the dataframe of MK_statistics."""
-        MK_statistics = self.MK_statistics
-        if MK_statistics is None:
+    def get_SMK_statistics(self) -> pd.DataFrame:
+        """Get the dataframe of SMK_statistics."""
+        SMK_statistics = self.SMK_statistics
+        if SMK_statistics is None:
             raise ValueError("Call detector() first.")
-        return MK_statistics
+        return SMK_statistics
 
     def get_top_k_metrics(
         self, time_point: datetime, top_k: Optional[int] = None
@@ -551,21 +524,21 @@ class MKDetector(Detector):
         # obtain the Tau for all metrics at the time point
         Tau_df_tp = Tau_df.loc[Tau_df["ds"] == time_point, :]
         trend_df_tp = trend_df.loc[trend_df["ds"] == time_point, :]
-        MK_statistics_tp = pd.merge(Tau_df_tp, trend_df_tp)
+        SMK_statistics_tp = pd.merge(Tau_df_tp, trend_df_tp)
 
         # sort the metrics according to their Tau
         if self.direction == "down":
-            top_metrics = MK_statistics_tp.reindex(
-                MK_statistics_tp.Tau.sort_values(axis=0).index
+            top_metrics = SMK_statistics_tp.reindex(
+                SMK_statistics_tp.Tau.sort_values(axis=0).index
             )
         elif self.direction == "up":
-            top_metrics = MK_statistics_tp.reindex(
-                MK_statistics_tp.Tau.sort_values(axis=0, ascending=False).index
+            top_metrics = SMK_statistics_tp.reindex(
+                SMK_statistics_tp.Tau.sort_values(axis=0, ascending=False).index
             )
         else:
             assert self.direction == "both"
-            top_metrics = MK_statistics_tp.reindex(
-                MK_statistics_tp.Tau.abs().sort_values(axis=0, ascending=False).index
+            top_metrics = SMK_statistics_tp.reindex(
+                SMK_statistics_tp.Tau.abs().sort_values(axis=0, ascending=False).index
             )
 
         if top_k is None:
@@ -611,23 +584,23 @@ class MKDetector(Detector):
     def _metrics_analysis(self) -> Tuple[pd.DataFrame, pd.DataFrame]:
         if not self.multivariate:
             raise ValueError("Your data is not multivariate.")
-        MK_statistics = self.MK_statistics
-        assert MK_statistics is not None
+        SMK_statistics = self.SMK_statistics
+        assert SMK_statistics is not None
 
         # obtain the Tau for all metrics at all time points
-        Tau_df = pd.DataFrame.from_dict(list(MK_statistics.Tau))
-        Tau_df["ds"] = MK_statistics.ds
+        Tau_df = pd.DataFrame.from_dict(list(SMK_statistics.Tau))
+        Tau_df["ds"] = SMK_statistics.ds
         Tau_df = Tau_df.drop(["overall"], axis=1)  # remove overall score
 
-        trend_df = pd.DataFrame.from_dict(list(MK_statistics.trend_direction))
-        trend_df["ds"] = MK_statistics.ds
+        trend_df = pd.DataFrame.from_dict(list(SMK_statistics.trend_direction))
+        trend_df["ds"] = SMK_statistics.ds
         trend_df = trend_df.drop(["overall"], axis=1)  # remove overall trend
 
         return Tau_df, trend_df
 
     def plot(
         self,
-        detected_time_points: Sequence[MKChangePoint],
+        detected_time_points: Sequence[SMKChangePoint],
         ax: Optional[plt.Axes] = None,
         figsize: Optional[Tuple[int, int]] = None,
         changepoint_color: str = "red",
