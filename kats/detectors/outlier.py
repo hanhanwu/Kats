@@ -179,7 +179,7 @@ class MultivariateAnomalyDetector(Detector):
         # pyre-fixme[16]: `Optional` has no attribute `diff`.
         time_diff = data.time.sort_values().diff().dropna()
         if len(time_diff.unique()) == 1:  # check constant frequenccy
-            freq = time_diff.unique()[0].astype("int")
+            freq = time_diff.unique()[0]
             self.granularity_days = freq / (24 * 3600 * (10 ** 9))
         else:
             raise RuntimeError(
